@@ -1,0 +1,66 @@
+---
+- name: Create docker network
+  docker_network:
+    name: "{{ docker_network_name }}"
+  tags:
+    - kibana
+
+- name: Ensure Kibana config dir exists
+  file:
+    state: "directory"
+    path: "{{ kibana_conf_dir }}"
+  tags:
+    - kibana
+
+- name: Ensure Kibana certs dir exists
+  file:
+    state: "directory"
+    path: "{{ kibana_certs_dir }}"    
+  tags:
+    - kibana
+
+- name: Template kibana.yml file
+  template:
+    force: True
+    src: "kibana.yml.j2"
+    dest: "{{ kibana_conf_dir }}/kibana.yml"
+  tags:
+    - kibana
+
+- name: Copy certificates
+  copy:
+    src: "{{ inventory_dir }}/files/certs/"
+    dest: "{{ kibana_certs_dir }}"
+  tags:
+    - kibana
+
+- name: Copy certificates
+  copy:
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+    decrypt: yes
+  with_items:
+   - { src: "{{ inventory_dir }}/files/certs/{{ ansible_hostname }}/", dest: "{{ kibana_certs_dir }}" }
+   - { src: "{{ inventory_dir }}/files/certs/ca/", dest: "{{ kibana_certs_dir }}" }   
+  tags:
+    - kibana
+
+- name: Start kibana container
+  docker_container:
+    name: "{{ kibana_hostname }}"
+    image: "{{ kibana_image }}"
+    volumes:
+    - "{{ kibana_conf_dir }}/kibana.yml:{{ kibana_conf_dir }}/kibana.yml"
+    - "{{ kibana_certs_dir }}:{{ kibana_certs_dir }}:ro"    
+    networks:
+    - name: "{{ docker_network_name }}"
+    ports:
+    - "5601:5601"
+    log_driver: json-file
+    log_options:
+      max-size: "{{ docker_log_max_size }}"
+      max-file: "{{ docker_log_max_file }}"
+    restart: yes
+    restart_policy: unless-stopped
+  tags:
+    - kibana
